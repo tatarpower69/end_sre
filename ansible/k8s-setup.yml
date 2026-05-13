@@ -55,6 +55,11 @@
       args:
         chdir: "{{ project_dir }}"
 
+    - name: Deploy Redis
+      command: k3s kubectl apply -f k8s/redis.yml
+      args:
+        chdir: "{{ project_dir }}"
+
     - name: Wait for PostgreSQL to be ready
       command: k3s kubectl wait --for=condition=ready pod -l app=postgres -n sre-microservices --timeout=120s
       args:

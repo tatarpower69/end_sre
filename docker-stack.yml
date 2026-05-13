@@ -264,6 +264,16 @@ services:
     networks:
       - micro-network
 
+  redis:
+    image: redis:alpine
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+    networks:
+      - micro-network
+
 networks:
   micro-network:
     driver: overlay

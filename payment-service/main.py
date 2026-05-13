@@ -4,8 +4,22 @@ from prometheus_fastapi_instrumentator import Instrumentator
 from prometheus_client import Counter, Histogram
 import time
 import random
+import redis
+import os
+import json
 
 app = FastAPI(title="Payment Service")
+
+# Redis configuration
+REDIS_HOST = os.getenv("REDIS_HOST", "redis")
+REDIS_PORT = int(os.getenv("REDIS_PORT", 6379))
+
+try:
+    r = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=0, socket_timeout=2)
+    r.ping()
+    redis_connected = True
+except:
+    redis_connected = False
 
 app.add_middleware(
     CORSMiddleware,
@@ -20,7 +34,14 @@ PAYMENT_LATENCY = Histogram('payment_processing_seconds', 'Payment processing ti
 
 @app.get("/health")
 def health():
-    return {"status": "healthy"}
+    status = {"status": "healthy"}
+    if redis_connected:
+        try:
+            r.ping()
+            status["redis"] = "connected"
+        except:
+            status["redis"] = "disconnected"
+    return status
 
 @app.get("/")
 def read_root():
@@ -28,11 +49,29 @@ def read_root():
 
 @app.get("/payments")
 def get_payments():
-    return [
+    # Try to get from cache first
+    if redis_connected:
+        try:
+            cached = r.get("latest_payments")
+            if cached:
+                return json.loads(cached)
+        except:
+            pass
+
+    payments = [
         {"id": "PAY-001", "order_id": 5001, "amount": 1200.00, "status": "completed", "method": "credit_card"},
         {"id": "PAY-002", "order_id": 5002, "amount": 499.99, "status": "pending", "method": "paypal"},
         {"id": "PAY-003", "order_id": 5003, "amount": 89.50, "status": "completed", "method": "bank_transfer"}
     ]
+
+    # Store in cache
+    if redis_connected:
+        try:
+            r.setex("latest_payments", 60, json.dumps(payments))
+        except:
+            pass
+
+    return payments
 
 @app.post("/payments/process")
 def process_payment(order_id: int, amount: float, method: str = "credit_card"):

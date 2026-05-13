@@ -162,6 +162,12 @@ services:
     networks:
       - micro-network
 
+  redis:
+    image: redis:alpine
+    restart: unless-stopped
+    networks:
+      - micro-network
+
 networks:
   micro-network:
     driver: bridge
