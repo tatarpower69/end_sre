@@ -1,0 +1,135 @@
+---
+- name: Setup Docker and Deploy Microservices Platform
+  hosts: swarm_managers
+  become: true
+  vars:
+    docker_compose_version: "2.24.0"
+    project_dir: "/home/ubuntu/project"
+    project_repo: "https://github.com/tatarpower69/Site-Reliability-Engineering-.git"
+
+  tasks:
+    ###########################################################################
+    # Phase 1: System Dependencies
+    ###########################################################################
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Install required system packages
+      apt:
+        name:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - gnupg
+          - lsb-release
+          - software-properties-common
+          - python3-pip
+          - git
+          - jq
+        state: present
+
+    ###########################################################################
+    # Phase 2: Docker Installation
+    ###########################################################################
+    - name: Add Docker GPG key
+      apt_key:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        state: present
+
+    - name: Add Docker repository
+      apt_repository:
+        repo: "deb [arch=amd64] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
+        state: present
+
+    - name: Install Docker Engine
+      apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-compose-plugin
+        state: present
+        update_cache: yes
+
+    - name: Start and enable Docker service
+      systemd:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Add ubuntu user to docker group
+      user:
+        name: ubuntu
+        groups: docker
+        append: yes
+
+    ###########################################################################
+    # Phase 3: Docker Swarm Initialization
+    ###########################################################################
+    - name: Check if Swarm is already initialized
+      command: docker info --format '{{ "{{" }}.Swarm.LocalNodeState{{ "}}" }}'
+      register: swarm_status
+      changed_when: false
+
+    - name: Initialize Docker Swarm
+      command: docker swarm init --advertise-addr {{ ansible_default_ipv4.address }}
+      when: swarm_status.stdout != "active"
+
+    ###########################################################################
+    # Phase 4: Clone and Deploy Project
+    ###########################################################################
+    - name: Clone project repository
+      git:
+        repo: "{{ project_repo }}"
+        dest: "{{ project_dir }}"
+        version: main
+        force: yes
+      become_user: ubuntu
+
+    - name: Deploy with Docker Compose
+      command: docker compose up -d --build
+      args:
+        chdir: "{{ project_dir }}"
+
+    - name: Deploy Docker Swarm stack
+      command: docker stack deploy -c docker-stack.yml sre-app
+      args:
+        chdir: "{{ project_dir }}"
+
+    ###########################################################################
+    # Phase 5: Verify Deployment
+    ###########################################################################
+    - name: Wait for services to start
+      pause:
+        seconds: 30
+
+    - name: Check running containers
+      command: docker ps --format "table {{ '{{' }}.Names{{ '}}' }}\t{{ '{{' }}.Status{{ '}}' }}\t{{ '{{' }}.Ports{{ '}}' }}"
+      register: containers
+
+    - name: Display running containers
+      debug:
+        var: containers.stdout_lines
+
+    - name: Verify service health endpoints
+      uri:
+        url: "http://localhost/api/{{ item }}/health"
+        return_content: yes
+        status_code: 200
+      loop:
+        - auth
+        - user
+        - product
+        - order
+        - chat
+        - payment
+        - notification
+      register: health_results
+      ignore_errors: yes
+
+    - name: Display health check results
+      debug:
+        msg: "{{ item.item }}: {{ item.json.status | default('FAILED') }}"
+      loop: "{{ health_results.results }}"

@@ -94,6 +94,36 @@
             </div>
             <div class="log-view" id="log-chat">Waiting for telemetry...</div>
         </div>
+
+        <div class="card" id="card-payment">
+            <div class="card-header">
+                <div class="service-info">
+                    <h3>Payment Service</h3>
+                    <p>FINANCIAL GATEWAY</p>
+                </div>
+                <span class="port-tag">API /payment</span>
+            </div>
+            <div class="btn-group">
+                <button onclick="testService('payment', 'health')">Health Check</button>
+                <button onclick="testService('payment', 'payments')">Transactions</button>
+            </div>
+            <div class="log-view" id="log-payment">Waiting for telemetry...</div>
+        </div>
+
+        <div class="card" id="card-notification">
+            <div class="card-header">
+                <div class="service-info">
+                    <h3>Notification Service</h3>
+                    <p>ALERT DISPATCH</p>
+                </div>
+                <span class="port-tag">API /notification</span>
+            </div>
+            <div class="btn-group">
+                <button onclick="testService('notification', 'health')">Health Check</button>
+                <button onclick="testService('notification', 'notifications')">View Alerts</button>
+            </div>
+            <div class="log-view" id="log-notification">Waiting for telemetry...</div>
+        </div>
     </div>
 
     <div class="stats-panel">
@@ -109,6 +139,14 @@
             <div class="metric-mini-card">
                 <h4>Total Requests</h4>
                 <div class="metric-value" id="totalRequests">1.2k</div>
+            </div>
+            <div class="metric-mini-card">
+                <h4>Active Services</h4>
+                <div class="metric-value">7 / 7</div>
+            </div>
+            <div class="metric-mini-card">
+                <h4>Error Rate</h4>
+                <div class="metric-value">0.4%</div>
             </div>
         </div>
     </div>

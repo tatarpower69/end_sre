@@ -1,0 +1,112 @@
+---
+- name: Setup Kubernetes (K3s) and Deploy Manifests
+  hosts: k8s_master
+  become: true
+  vars:
+    project_dir: "/home/ubuntu/project"
+
+  tasks:
+    ###########################################################################
+    # Phase 1: Install K3s (Lightweight Kubernetes)
+    ###########################################################################
+    - name: Check if K3s is installed
+      stat:
+        path: /usr/local/bin/k3s
+      register: k3s_binary
+
+    - name: Install K3s
+      shell: curl -sfL https://get.k3s.io | sh -s - --write-kubeconfig-mode 644
+      when: not k3s_binary.stat.exists
+
+    - name: Wait for K3s to be ready
+      command: k3s kubectl get nodes
+      register: k3s_nodes
+      retries: 10
+      delay: 10
+      until: k3s_nodes.rc == 0
+
+    - name: Display K3s nodes
+      debug:
+        var: k3s_nodes.stdout_lines
+
+    ###########################################################################
+    # Phase 2: Build Container Images
+    ###########################################################################
+    - name: Build microservice images
+      command: docker compose build
+      args:
+        chdir: "{{ project_dir }}"
+
+    ###########################################################################
+    # Phase 3: Deploy Kubernetes Manifests
+    ###########################################################################
+    - name: Apply Kubernetes namespace
+      command: k3s kubectl apply -f k8s/namespace.yml
+      args:
+        chdir: "{{ project_dir }}"
+
+    - name: Apply ConfigMap and Secrets
+      command: k3s kubectl apply -f k8s/configmap.yml
+      args:
+        chdir: "{{ project_dir }}"
+
+    - name: Deploy PostgreSQL
+      command: k3s kubectl apply -f k8s/postgres.yml
+      args:
+        chdir: "{{ project_dir }}"
+
+    - name: Wait for PostgreSQL to be ready
+      command: k3s kubectl wait --for=condition=ready pod -l app=postgres -n sre-microservices --timeout=120s
+      args:
+        chdir: "{{ project_dir }}"
+
+    - name: Deploy all microservices
+      command: k3s kubectl apply -f k8s/services.yml
+      args:
+        chdir: "{{ project_dir }}"
+
+    - name: Deploy monitoring stack
+      command: k3s kubectl apply -f k8s/monitoring.yml
+      args:
+        chdir: "{{ project_dir }}"
+
+    - name: Deploy Ingress
+      command: k3s kubectl apply -f k8s/ingress.yml
+      args:
+        chdir: "{{ project_dir }}"
+
+    - name: Deploy Horizontal Pod Autoscalers
+      command: k3s kubectl apply -f k8s/hpa.yml
+      args:
+        chdir: "{{ project_dir }}"
+
+    ###########################################################################
+    # Phase 4: Verify Deployment
+    ###########################################################################
+    - name: Wait for deployments to be ready
+      pause:
+        seconds: 45
+
+    - name: Check all pods status
+      command: k3s kubectl get pods -n sre-microservices -o wide
+      register: pods_status
+
+    - name: Display pods status
+      debug:
+        var: pods_status.stdout_lines
+
+    - name: Check all services
+      command: k3s kubectl get svc -n sre-microservices
+      register: svc_status
+
+    - name: Display services
+      debug:
+        var: svc_status.stdout_lines
+
+    - name: Check HPA status
+      command: k3s kubectl get hpa -n sre-microservices
+      register: hpa_status
+
+    - name: Display HPA status
+      debug:
+        var: hpa_status.stdout_lines

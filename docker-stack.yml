@@ -2,10 +2,24 @@ version: '3.8'
 
 services:
   auth-service:
+    image: sre-platform/auth-service:latest
     build: ./auth-service
     environment:
       - DATABASE_URL=${DATABASE_URL}
-    restart: unless-stopped
+    deploy:
+      replicas: 2
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+      update_config:
+        parallelism: 1
+        delay: 10s
+        order: start-first
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 256M
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
@@ -15,10 +29,24 @@ services:
       - micro-network
 
   user-service:
+    image: sre-platform/user-service:latest
     build: ./user-service
     environment:
       - DATABASE_URL=${DATABASE_URL}
-    restart: unless-stopped
+    deploy:
+      replicas: 2
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+      update_config:
+        parallelism: 1
+        delay: 10s
+        order: start-first
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 256M
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
@@ -28,10 +56,24 @@ services:
       - micro-network
 
   product-service:
+    image: sre-platform/product-service:latest
     build: ./product-service
     environment:
       - DATABASE_URL=${DATABASE_URL}
-    restart: unless-stopped
+    deploy:
+      replicas: 2
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+      update_config:
+        parallelism: 1
+        delay: 10s
+        order: start-first
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 256M
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
@@ -41,13 +83,27 @@ services:
       - micro-network
 
   order-service:
+    image: sre-platform/order-service:latest
     build: ./order-service
     environment:
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - POSTGRES_DB=${POSTGRES_DB}
       - DB_HOST=db
-    restart: unless-stopped
+    deploy:
+      replicas: 3
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+      update_config:
+        parallelism: 1
+        delay: 10s
+        order: start-first
+      resources:
+        limits:
+          cpus: '0.30'
+          memory: 256M
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
@@ -57,10 +113,24 @@ services:
       - micro-network
 
   chat-service:
+    image: sre-platform/chat-service:latest
     build: ./chat-service
     environment:
       - DATABASE_URL=${DATABASE_URL}
-    restart: unless-stopped
+    deploy:
+      replicas: 2
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+      update_config:
+        parallelism: 1
+        delay: 10s
+        order: start-first
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 256M
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
@@ -70,10 +140,24 @@ services:
       - micro-network
 
   payment-service:
+    image: sre-platform/payment-service:latest
     build: ./payment-service
     environment:
       - DATABASE_URL=${DATABASE_URL}
-    restart: unless-stopped
+    deploy:
+      replicas: 3
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+      update_config:
+        parallelism: 1
+        delay: 10s
+        order: start-first
+      resources:
+        limits:
+          cpus: '0.30'
+          memory: 256M
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
@@ -83,10 +167,24 @@ services:
       - micro-network
 
   notification-service:
+    image: sre-platform/notification-service:latest
     build: ./notification-service
     environment:
       - DATABASE_URL=${DATABASE_URL}
-    restart: unless-stopped
+    deploy:
+      replicas: 2
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+      update_config:
+        parallelism: 1
+        delay: 10s
+        order: start-first
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 256M
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
@@ -103,22 +201,18 @@ services:
       POSTGRES_DB: ${POSTGRES_DB}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    restart: unless-stopped
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      restart_policy:
+        condition: on-failure
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
       retries: 5
-    networks:
-      - micro-network
-
-  db-exporter:
-    image: prometheuscommunity/postgres-exporter
-    environment:
-      DATA_SOURCE_NAME: "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}?sslmode=disable"
-    depends_on:
-      db:
-        condition: service_healthy
     networks:
       - micro-network
 
@@ -128,18 +222,28 @@ services:
       - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
       - ./monitoring/alert.rules.yml:/etc/prometheus/alert.rules.yml
     ports:
-      - "${PROMETHEUS_PORT}:9090"
+      - "9090:9090"
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
     networks:
       - micro-network
 
   grafana:
     image: grafana/grafana:latest
     ports:
-      - "${GRAFANA_PORT}:3000"
+      - "3000:3000"
     volumes:
       - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD}
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
     networks:
       - micro-network
 
@@ -149,22 +253,20 @@ services:
       - ./frontend:/usr/share/nginx/html
       - ./frontend/nginx.conf:/etc/nginx/nginx.conf
     ports:
-      - "${NGINX_PORT}:80"
-    restart: unless-stopped
-    depends_on:
-      - auth-service
-      - user-service
-      - product-service
-      - order-service
-      - chat-service
-      - payment-service
-      - notification-service
+      - "80:80"
+    deploy:
+      replicas: 2
+      restart_policy:
+        condition: on-failure
+      update_config:
+        parallelism: 1
+        delay: 5s
     networks:
       - micro-network
 
 networks:
   micro-network:
-    driver: bridge
+    driver: overlay
 
 volumes:
   postgres_data:

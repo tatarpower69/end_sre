@@ -30,6 +30,14 @@ scrape_configs:
     static_configs:
       - targets: ["chat-service:8000"]
 
+  - job_name: "payment-service"
+    static_configs:
+      - targets: ["payment-service:8000"]
+
+  - job_name: "notification-service"
+    static_configs:
+      - targets: ["notification-service:8000"]
+
   - job_name: "postgres"
     static_configs:
       - targets: ["db-exporter:9187"]

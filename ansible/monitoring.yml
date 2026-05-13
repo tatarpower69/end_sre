@@ -1,0 +1,101 @@
+---
+- name: Configure Monitoring Stack
+  hosts: swarm_managers
+  become: true
+  vars:
+    project_dir: "/home/ubuntu/project"
+
+  tasks:
+    ###########################################################################
+    # Phase 1: Prometheus Configuration
+    ###########################################################################
+    - name: Ensure monitoring directory exists
+      file:
+        path: "{{ project_dir }}/monitoring"
+        state: directory
+        owner: ubuntu
+        group: ubuntu
+
+    - name: Copy Prometheus configuration
+      copy:
+        src: ../monitoring/prometheus.yml
+        dest: "{{ project_dir }}/monitoring/prometheus.yml"
+        owner: ubuntu
+        group: ubuntu
+
+    - name: Copy alert rules
+      copy:
+        src: ../monitoring/alert.rules.yml
+        dest: "{{ project_dir }}/monitoring/alert.rules.yml"
+        owner: ubuntu
+        group: ubuntu
+
+    ###########################################################################
+    # Phase 2: Grafana Configuration
+    ###########################################################################
+    - name: Ensure Grafana provisioning directories exist
+      file:
+        path: "{{ project_dir }}/monitoring/grafana/provisioning/{{ item }}"
+        state: directory
+        owner: ubuntu
+        group: ubuntu
+        recurse: yes
+      loop:
+        - datasources
+        - dashboards
+
+    - name: Copy Grafana datasource configuration
+      copy:
+        src: ../monitoring/grafana/provisioning/datasources/
+        dest: "{{ project_dir }}/monitoring/grafana/provisioning/datasources/"
+        owner: ubuntu
+        group: ubuntu
+
+    - name: Copy Grafana dashboard configuration
+      copy:
+        src: ../monitoring/grafana/provisioning/dashboards/
+        dest: "{{ project_dir }}/monitoring/grafana/provisioning/dashboards/"
+        owner: ubuntu
+        group: ubuntu
+
+    ###########################################################################
+    # Phase 3: Restart Monitoring Services
+    ###########################################################################
+    - name: Restart Prometheus container
+      command: docker compose restart prometheus
+      args:
+        chdir: "{{ project_dir }}"
+
+    - name: Restart Grafana container
+      command: docker compose restart grafana
+      args:
+        chdir: "{{ project_dir }}"
+
+    - name: Wait for monitoring services
+      pause:
+        seconds: 15
+
+    ###########################################################################
+    # Phase 4: Verify Monitoring
+    ###########################################################################
+    - name: Verify Prometheus is accessible
+      uri:
+        url: "http://localhost:9090/-/healthy"
+        return_content: yes
+        status_code: 200
+      register: prometheus_health
+      ignore_errors: yes
+
+    - name: Verify Grafana is accessible
+      uri:
+        url: "http://localhost:3000/api/health"
+        return_content: yes
+        status_code: 200
+      register: grafana_health
+      ignore_errors: yes
+
+    - name: Display monitoring status
+      debug:
+        msg:
+          - "Prometheus: {{ 'HEALTHY' if prometheus_health.status == 200 else 'DOWN' }}"
+          - "Grafana: {{ 'HEALTHY' if grafana_health.status == 200 else 'DOWN' }}"
